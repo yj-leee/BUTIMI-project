@@ -1,0 +1,40 @@
+{
+  "resultCode": "0000",
+  "totalCount": 2,
+  "data": {
+    "list": [
+      {
+        "seq": "A1001",
+        "carNo": "12가3456",
+        "carNm": "그랜저 IG 2.4 프리미엄",
+        "grade": "프리미엄",
+        "yearType": "2019",
+        "firstRegDt": "2019-03-11",
+        "distance": "84,120",
+        "fuelNm": "가솔린",
+        "gearNm": "오토",
+        "colorNm": "흰색",
+        "salePrice": "16,900,000",
+        "regionNm": "부산",
+        "statusNm": "판매중",
+        "regDt": "2026-07-10"
+      },
+      {
+        "seq": "A1002",
+        "carNo": "34나7890",
+        "carNm": "쏘렌토 MQ4 2.2 디젤",
+        "grade": "시그니처",
+        "yearType": "2021",
+        "firstRegDt": "2021-08-02",
+        "distance": "41,300",
+        "fuelNm": "디젤",
+        "gearNm": "오토",
+        "colorNm": "검정",
+        "salePrice": "28,500,000",
+        "regionNm": "서울",
+        "statusNm": "판매중",
+        "regDt": "2026-07-12"
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+# Runtime dependencies
+requests>=2.31,<3       # HTTP client
+openpyxl>=3.1,<4        # Excel (.xlsx) export
+
+# Optional: enable browser-rendered adapters (Playwright). Uncomment if needed.
+# playwright>=1.40
+
+# Dev / test
+pytest>=8.0

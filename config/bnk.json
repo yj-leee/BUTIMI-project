@@ -1,0 +1,56 @@
+{
+  "key": "bnk",
+  "display_name": "BNK캐피탈",
+
+  "_help": [
+    "이 파일은 BNK 선구매 차량 그리드를 어떻게 요청/파싱할지에 대한 설정입니다.",
+    "아래 request.url / body / parse.rows_path / parse.field_map 은 예시(placeholder)이며,",
+    "사이트 접근이 가능한 환경에서 브라우저 개발자도구 Network 탭으로 실제 요청을 캡처해",
+    "정확한 값으로 바꿔야 실제 데이터가 수집됩니다. 자세한 방법은 README 참고.",
+    "(_help / _로 시작하는 키는 코드에서 무시됩니다)"
+  ],
+
+  "request": {
+    "url": "https://web.bnkcapital.co.kr/REPLACE_WITH_REAL_GRID_ENDPOINT",
+    "method": "POST",
+    "body_type": "form",
+    "headers": {
+      "Referer": "https://web.bnkcapital.co.kr/view/prtn/alem/PrtnAlem540M01",
+      "X-Requested-With": "XMLHttpRequest"
+    },
+    "params": {},
+    "body": {
+      "_comment": "고정으로 함께 보내야 하는 검색 파라미터를 여기에. 예: 지역/차종 필터, CSRF 토큰 등"
+    }
+  },
+
+  "pagination": {
+    "mode": "page",
+    "page_param": "pageNo",
+    "size_param": "pageSize",
+    "page_size": 20,
+    "start_page": 1,
+    "max_pages": 50,
+    "total_path": ""
+  },
+
+  "parse": {
+    "rows_path": "REPLACE_WITH_PATH_TO_ROW_ARRAY",
+    "field_map": {
+      "listing_id":     ["REPLACE_id_key"],
+      "vehicle_no":     ["REPLACE_carNo_key"],
+      "model_name":     ["REPLACE_carNm_key"],
+      "trim":           ["REPLACE_trim_key"],
+      "year":           ["REPLACE_year_key"],
+      "first_reg_date": ["REPLACE_firstRegDt_key"],
+      "mileage_km":     ["REPLACE_mileage_key"],
+      "fuel":           ["REPLACE_fuel_key"],
+      "transmission":   ["REPLACE_transmission_key"],
+      "color":          ["REPLACE_color_key"],
+      "price":          ["REPLACE_price_key"],
+      "region":         ["REPLACE_region_key"],
+      "status":         ["REPLACE_status_key"],
+      "posted_at":      ["REPLACE_postedAt_key"]
+    }
+  }
+}

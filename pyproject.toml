@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "butimi"
+version = "0.1.0"
+description = "캐피탈사 선구매 차량 리스트 수집기"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31,<3",
+    "openpyxl>=3.1,<4",
+]
+
+[project.optional-dependencies]
+html = ["beautifulsoup4>=4.12"]      # HTML 표를 파싱하는 어댑터용
+browser = ["playwright>=1.40"]       # JS 렌더링이 필요한 사이트용
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+butimi = "butimi.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
