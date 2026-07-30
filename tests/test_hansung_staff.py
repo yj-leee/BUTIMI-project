@@ -75,6 +75,31 @@ def test_discover_store_links():
     ]
 
 
+def test_discover_consultant_view_links():
+    html = """
+      <a href="/sales/consultant-view-1450">전석영 이사</a>
+      <a href="https://mb.hansung.co.kr/sales/consultant-view-1187">탁용진 팀장</a>
+      <a href="/sales/consultant-view-1450">중복</a>
+      <a href="/sales/consultant-1">목록 링크(제외)</a>
+    """
+    links = hs.discover_consultant_view_links(html)
+    assert links == [
+        "https://mb.hansung.co.kr/sales/consultant-view-1450",
+        "https://mb.hansung.co.kr/sales/consultant-view-1187",
+    ]
+
+
+def test_parse_detail_extracts_name_phone_showroom():
+    html = (Path(__file__).parent / "fixtures" / "hansung_consultant_view.html").read_text(
+        encoding="utf-8")
+    m = hs.parse_detail(html, detail_url="u")
+    assert m is not None
+    assert m.name == "전석영"
+    assert m.contact == "010-9876-5432"      # 전시장 번호가 아닌 휴대폰 우선
+    assert m.showroom == "강남/청담 전시장"
+    assert m.team == "2팀~9팀"                # 개인 팀 없으니 전시장 범위로 채움
+
+
 def test_to_xlsx_and_csv(tmp_path):
     members = [
         hs.StaffMember("김철수", "010-1234-5678", "방배 전시장", "2팀~마스터팀"),

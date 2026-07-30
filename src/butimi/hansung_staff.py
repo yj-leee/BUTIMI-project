@@ -1,24 +1,27 @@
-"""한성자동차(메르세데스-벤츠) 전시장 판매사원 수집기.
+"""한성자동차(메르세데스-벤츠) 세일즈 컨설턴트(판매사원) 수집기.
 
-대상: https://mb.hansung.co.kr/sales/retail-store
-목표: 각 전시장 페이지에서 **판매사원 이름 / 연락처 / 소속 전시장** 을 추출해
-      엑셀(.xlsx)로 저장한다.
+대상: https://mb.hansung.co.kr/sales/consultant-1 (전시장별 세일즈 컨설턴트)
+목표: **이름 / 연락처 / 전시장 / 팀** 을 추출해 엑셀(.xlsx)로 저장한다.
 
-동작 개요
----------
-1. 목록 페이지(``/sales/retail-store``)에서 개별 전시장 페이지 링크
-   (``/sales/retail-store-<n>``)와 전시장 이름을 찾는다.
-2. 각 전시장 페이지 HTML 을 받아 판매사원 블록을 파싱한다.
-3. ``이름 / 연락처 / 전시장`` 세 컬럼으로 정규화해 반환한다.
+사이트 구조(2단계)
+------------------
+- 목록 페이지  ``/sales/consultant-<n>``       : 전시장별 컨설턴트 이름/직급/팀
+  (전화번호는 여기 없음)
+- 상세 페이지  ``/sales/consultant-view-<id>`` : 개인 연락처(휴대폰)가 여기 있음
 
-파싱은 **텍스트 기반 휴리스틱**이라 사이트 마크업이 바뀌어도 비교적 견고하다.
-전화번호를 앵커로 잡고, 그 앞쪽에서 사람 이름처럼 보이는 토큰을 짝지운다.
-구조가 예상과 다르면 ``parse_staff`` 의 규칙만 손보면 된다.
+그래서 ``crawl_consultants`` 는 목록/지역 페이지를 훑어 ``consultant-view`` 링크를
+모두 모은 뒤, 각 상세 페이지를 방문해 이름·연락처·전시장·팀을 뽑는다. 사람마다
+손으로 클릭할 필요가 없다.
 
-주의: 이 저장소를 만든 실행 환경은 네트워크 정책상 ``mb.hansung.co.kr`` 접근이
-차단돼 있다. 그래서 실제 사이트로의 수집은 **사이트 접근이 되는 PC**에서 실행해야
-한다(파싱 로직은 tests 로 검증됨). 오프라인 검증을 위해 ``--save-html`` 로 받은
-HTML 을 저장해 두고 ``parse_staff`` 를 재실행할 수 있다.
+주의
+----
+- 이 저장소를 만든 실행 환경은 네트워크 정책상 ``mb.hansung.co.kr`` 접근이 **차단**
+  돼 있다. 실제 수집은 **사이트 접근이 되는 PC**에서 실행할 것(파싱 로직은 tests
+  로 검증됨).
+- 목록이 JS 로 렌더링되어 링크가 안 잡히면 ``--save-html`` 로 HTML 을 저장해
+  구조를 확인하거나 Playwright(browser) 방식으로 확장한다.
+- 상세 페이지의 실제 HTML 은 아직 확인하지 못해, ``parse_detail`` 은 전화/이름/
+  전시장을 방어적으로 추출한다. 필드가 비면 저장한 상세 HTML 로 규칙을 맞추면 된다.
 """
 
 from __future__ import annotations
@@ -31,6 +34,25 @@ from typing import Iterable
 from urllib.parse import urljoin
 
 BASE_URL = "https://mb.hansung.co.kr/sales/retail-store"
+
+# 세일즈 컨설턴트(판매사원) 실제 구조:
+#   - 목록 페이지  /sales/consultant-<n>            → 전시장별 컨설턴트 이름/직급/팀 (전화 없음)
+#   - 상세 페이지  /sales/consultant-view-<id>      → 개인 연락처(휴대폰)가 여기 있음
+#   - 지역 탭      /sales/consultant-7,10,49 ...    → 서울/경인/그 외 지역 목록
+# 개인 연락처는 상세 페이지에 있으므로, 목록에서 상세 링크를 모아 하나씩 방문한다.
+SALES_HOST = "https://mb.hansung.co.kr"
+
+# 스파이더 시작점(목록/지역 페이지). 여기서 consultant-view 링크들을 긁어 모은다.
+SEED_LISTING_URLS: tuple[str, ...] = (
+    "https://mb.hansung.co.kr/sales/consultant-1",   # 강남/청담
+    "https://mb.hansung.co.kr/sales/consultant-3",   # 삼성
+    "https://mb.hansung.co.kr/sales/consultant-4",   # 서초
+    "https://mb.hansung.co.kr/sales/consultant-5",   # 방배
+    "https://mb.hansung.co.kr/sales/consultant-6",   # 용산
+    "https://mb.hansung.co.kr/sales/consultant-7",   # 강남 자곡 / 서울 지역
+    "https://mb.hansung.co.kr/sales/consultant-10",  # 경인 지역
+    "https://mb.hansung.co.kr/sales/consultant-49",  # 그 외 지역
+)
 
 # 전시장별 팀 범위(사용자 제공). 페이지에서 개인 팀이 안 잡히면 이 값으로 채운다.
 # 수집 후 누락 점검(EXPECTED_SHOWROOMS)의 기준 목록이기도 하다.
@@ -228,6 +250,190 @@ def parse_staff(html: str, showroom: str, detail_url: str = "") -> list[StaffMem
     return members
 
 
+# --------------------------------------------------------------------------- #
+# 세일즈 컨설턴트(2단계: 목록 → 상세) 구조 파싱
+# --------------------------------------------------------------------------- #
+
+# 개인 상세 페이지 링크: /sales/consultant-view-1450
+_VIEW_LINK_RE = re.compile(r'/sales/consultant-view-\d+', re.IGNORECASE)
+# 목록/지역/해시태그 링크(스파이더가 더 따라갈 후보)
+_LISTING_LINK_RE = re.compile(
+    r'/sales/consultant(?:-hashtag/\d+|-\d+)(?![\w-])', re.IGNORECASE)
+
+# 직급어(상세 페이지에서 이름 옆 직급 추출용)
+_RANK_WORDS = ("팀장", "이사", "상무", "전무", "본부장", "지점장", "센터장",
+               "부장", "차장", "과장", "대리", "선임", "책임", "매니저", "사원")
+_RANK_RE = re.compile("(?:" + "|".join(_RANK_WORDS) + ")")
+
+
+def discover_consultant_view_links(html: str, base_url: str = SALES_HOST) -> list[str]:
+    """HTML 안의 모든 개인 상세 페이지(consultant-view) 절대 URL을 중복 없이 반환."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in _VIEW_LINK_RE.finditer(html):
+        url = urljoin(base_url, m.group(0))
+        if url not in seen:
+            seen.add(url)
+            out.append(url)
+    return out
+
+
+def _discover_listing_links(html: str, base_url: str = SALES_HOST) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in _LISTING_LINK_RE.finditer(html):
+        url = urljoin(base_url, m.group(0))
+        if url not in seen:
+            seen.add(url)
+            out.append(url)
+    return out
+
+
+# 알려진 전시장 이름(팀 범위 목록 + 페이지에서 확인된 추가 전시장). 긴 이름 우선.
+KNOWN_SHOWROOMS: tuple[str, ...] = tuple(sorted(
+    set(SHOWROOM_TEAM_RANGE) | {"수원 권선 전시장", "춘천 전시장", "강릉 전시장"},
+    key=lambda s: len(_norm_store(s)), reverse=True,
+))
+
+
+def _find_showroom(text: str) -> str:
+    """텍스트에서 전시장 이름을 찾는다. 알려진 이름을 우선 매칭(더 구체적인 것 먼저)."""
+    norm = _norm_store(text)
+    for name in KNOWN_SHOWROOMS:
+        if _norm_store(name) in norm:
+            return name
+    # 폴백: 'OO 전시장' 패턴(앞 단어 최대 2개까지만)
+    m = re.search(r"[가-힣]{2,4}(?:\s[가-힣]{2,4}){0,2}\s*전시장", text)
+    return re.sub(r"\s+", " ", m.group()).strip() if m else ""
+
+
+def parse_detail(html: str, detail_url: str = "") -> StaffMember | None:
+    """개인 상세 페이지(consultant-view)에서 이름/연락처/전시장/팀을 추출.
+
+    실제 상세 페이지 HTML 을 아직 확인하지 못해, 이름은 <title>/og:title/헤딩에서,
+    연락처는 휴대폰(010) 우선으로, 전시장은 'OO 전시장' 패턴으로 뽑는 방어적 구현.
+    필드가 비면 --save-html 로 실제 페이지를 저장해 규칙을 맞추면 된다.
+    """
+    lines = html_to_lines(html)
+    text = "\n".join(lines)
+
+    # 이름: og:title / <title> 우선(예: "전석영 | 한성자동차"), 없으면 첫 이름 토큰
+    name = ""
+    mt = re.search(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)',
+                   html, re.IGNORECASE)
+    if not mt:
+        mt = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+    if mt:
+        head = unescape(_TAG_RE.sub("", mt.group(1)))
+        cand = re.split(r"[|·\-–—:\[]", head)[0].strip()
+        cand = cand.split()[0] if cand.split() else cand
+        if _NAME_RE.match(cand):
+            name = cand
+    if not name:
+        for ln in lines:
+            if _looks_like_name(ln):
+                name = ln
+                break
+
+    # 연락처: 휴대폰(010) 우선, 없으면 첫 전화번호
+    phones = _PHONE_RE.findall(text)
+    contact = ""
+    if phones:
+        mobiles = [p for p in phones if re.sub(r"\D", "", p).startswith("01")]
+        contact = normalize_phone(mobiles[0] if mobiles else phones[0])
+
+    showroom = _find_showroom(text)
+    team_hit = _TEAM_RE.search(text)
+    team = (re.sub(r"\s+", "", team_hit.group()) if team_hit
+            else team_range_for(showroom))
+
+    if not name and not contact:
+        return None
+    return StaffMember(name=name, contact=contact, showroom=showroom,
+                       team=team, detail_url=detail_url)
+
+
+def crawl_consultants(
+    seeds: Iterable[str] = SEED_LISTING_URLS,
+    *,
+    session=None,
+    save_html_dir: str | Path | None = None,
+    delay: float = 0.5,
+    max_listing_pages: int = 60,
+) -> list[StaffMember]:
+    """실제 사이트를 2단계로 수집한다: 목록/지역 페이지 → 개인 상세 페이지.
+
+    사이트 접근이 되는 PC에서 실행. 목록 페이지들을 훑어 consultant-view 링크를
+    모두 모은 뒤, 각 상세 페이지를 방문해 이름/연락처/전시장/팀을 추출한다.
+    """
+    import time
+
+    if session is None:
+        from .http_client import build_session
+        session = build_session(extra_headers={
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": SALES_HOST + "/sales/consultant-1",
+        })
+
+    save_dir = Path(save_html_dir) if save_html_dir else None
+    if save_dir:
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+    def _save(url: str, html: str) -> None:
+        if save_dir:
+            slug = re.sub(r"[^\w.-]", "_", url.split("/sales/")[-1]) or "page"
+            (save_dir / f"{slug}.html").write_text(html, encoding="utf-8")
+
+    # 1단계: 목록/지역 페이지를 훑어 상세 링크 수집(제한된 스파이더)
+    to_visit = list(dict.fromkeys(seeds))
+    visited: set[str] = set()
+    view_urls: list[str] = []
+    view_seen: set[str] = set()
+
+    while to_visit and len(visited) < max_listing_pages:
+        url = to_visit.pop(0)
+        if url in visited:
+            continue
+        visited.add(url)
+        try:
+            html = session.get(url).text
+        except Exception:  # noqa: BLE001 - 개별 페이지 실패는 건너뜀
+            continue
+        _save(url, html)
+        for v in discover_consultant_view_links(html):
+            if v not in view_seen:
+                view_seen.add(v)
+                view_urls.append(v)
+        for link in _discover_listing_links(html):
+            if link not in visited and link not in to_visit:
+                to_visit.append(link)
+        if delay:
+            time.sleep(delay)
+
+    if not view_urls:
+        raise RuntimeError(
+            "상세 페이지(consultant-view) 링크를 찾지 못했습니다. 목록이 JS 로 "
+            "렌더링될 수 있습니다. --save-html 로 HTML 을 저장해 확인하거나 "
+            "Playwright(browser) 방식으로 확장하세요."
+        )
+
+    # 2단계: 각 상세 페이지 방문 → 파싱
+    members: list[StaffMember] = []
+    for v in view_urls:
+        try:
+            html = session.get(v).text
+        except Exception:  # noqa: BLE001
+            continue
+        _save(v, html)
+        m = parse_detail(html, detail_url=v)
+        if m:
+            members.append(m)
+        if delay:
+            time.sleep(delay)
+
+    return dedupe(members)
+
+
 def discover_store_links(list_html: str, base_url: str = BASE_URL) -> list[tuple[str, str]]:
     """목록 페이지 HTML 에서 (전시장 이름, 절대 URL) 목록을 추출(중복 제거)."""
     found: list[tuple[str, str]] = []
@@ -299,9 +505,9 @@ def crawl(
 def dedupe(members: Iterable[StaffMember]) -> list[StaffMember]:
     """(이름, 연락처, 전시장) 기준 중복 제거, 순서 보존."""
     out: list[StaffMember] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str, str, str]] = set()
     for m in members:
-        key = (m.name, m.contact, m.showroom)
+        key = (m.name, m.contact, m.showroom, m.detail_url)
         if key in seen:
             continue
         seen.add(key)

@@ -146,37 +146,55 @@ PYTHONPATH=src python -m pytest -q
 
 ---
 
-## 한성자동차 전시장 판매사원 수집 (이름 / 연락처 / 전시장)
+## 한성자동차 세일즈 컨설턴트 수집 (이름 / 연락처 / 전시장 / 팀)
 
-메르세데스-벤츠 **한성자동차** 전시장 페이지에서 판매사원의 **이름·연락처·소속
-전시장·팀**을 모아 엑셀로 저장하는 별도 수집기입니다. (팀은 페이지에 개인 팀이
-표기돼 있으면 그 값을, 없으면 전시장 팀 범위를 채웁니다.)
+메르세데스-벤츠 **한성자동차** 세일즈 컨설턴트의 **이름·연락처·전시장·팀**을 모아
+엑셀로 저장하는 별도 수집기입니다.
 
-- 대상: <https://mb.hansung.co.kr/sales/retail-store> → 개별 전시장
-  페이지(`/sales/retail-store-<n>`).
-- 파서는 **텍스트 기반 휴리스틱**(전화번호를 앵커로 이름을 짝지음)이라 마크업이
-  바뀌어도 비교적 견고합니다. 구조가 다르면 `src/butimi/hansung_staff.py` 의
-  `parse_staff()` 규칙만 조정하면 됩니다.
+**사이트 구조는 2단계입니다.**
 
-```bash
-# 사이트 접근이 되는 PC 에서 실행
-PYTHONPATH=src python scripts/crawl_hansung_staff.py                 # → output/hansung_staff_YYYYMMDD.xlsx
-PYTHONPATH=src python scripts/crawl_hansung_staff.py --format csv
-PYTHONPATH=src python scripts/crawl_hansung_staff.py --save-html output/html   # 원본 HTML 함께 저장
+- 목록 페이지 `/sales/consultant-<n>` — 전시장별 컨설턴트 **이름·직급·팀** (전화 없음)
+- 상세 페이지 `/sales/consultant-view-<id>` — **개인 연락처(휴대폰)** 는 여기 있음
 
-# 저장해 둔 HTML 로 오프라인 재파싱
-PYTHONPATH=src python scripts/crawl_hansung_staff.py --from-html output/html
+그래서 스크립트는 목록/지역 페이지에서 상세 링크(`consultant-view-…`)를 전부
+모은 뒤 **각 상세 페이지를 자동으로 방문**해 연락처까지 채웁니다. 사람마다 손으로
+클릭할 필요가 없습니다.
+
+### 윈도우(명령 프롬프트, cmd)
+
+```cmd
+cd 프로젝트폴더\BUTIMI-project
+pip install requests openpyxl
+set PYTHONPATH=src && python scripts\crawl_hansung_staff.py
+```
+→ `output\hansung_staff_YYYYMMDD.xlsx` 생성.
+
+옵션:
+```cmd
+set PYTHONPATH=src && python scripts\crawl_hansung_staff.py --format csv
+set PYTHONPATH=src && python scripts\crawl_hansung_staff.py --save-html output\html
+set PYTHONPATH=src && python scripts\crawl_hansung_staff.py --from-html output\html
 ```
 
-> ⚠️ 이 저장소를 만든 실행 환경은 네트워크 정책상 `mb.hansung.co.kr` 접근이
-> **차단**돼 있어, 여기서는 실제 수집을 실행할 수 없습니다. 위 스크립트를
-> **사이트 접근이 되는 본인 PC**에서 돌리면 엑셀이 생성됩니다. 페이지가 JS 로
-> 렌더링되어 링크/사원이 안 잡히면 `--save-html` 로 HTML 을 저장해 파서를
-> 맞추거나, 저장한 HTML 을 공유해 주세요(파서를 고정해 드립니다).
+### macOS / Linux
 
-수집 후, 아직 사원이 안 잡힌 전시장을 자동 점검합니다(사용자가 알려준
-`강남/청담 · 삼성 · 서초 · 방배 · 용산 · 강남 자곡 · 인천 송도 · 분당 서현 ·
-인천 · 수원 · 안성 · 대전 · 대전 유성 · 원주 · 성남` 전시장 기준).
+```bash
+pip install requests openpyxl
+PYTHONPATH=src python scripts/crawl_hansung_staff.py
+```
+
+> ⚠️ 이 저장소를 만든 개발 환경은 네트워크 정책상 `mb.hansung.co.kr` 접근이
+> **차단**돼 있어 여기서는 실제 수집을 실행할 수 없습니다. **사이트 접속이 되는
+> 본인 PC**에서 돌리세요.
+>
+> 목록이 JavaScript 로 렌더링되어 상세 링크/데이터가 안 잡히면 `--save-html`
+> 로 HTML 을 저장해 구조를 확인하거나, 저장한 HTML 을 공유해 주세요(파서를
+> 실제 구조에 맞게 고정해 드립니다). 상세 페이지의 실제 HTML 을 아직 확인하지
+> 못해, 연락처/이름 추출 규칙은 보수적으로 작성돼 있습니다.
+
+수집 후, 컨설턴트가 안 잡힌 전시장을 자동 점검합니다(기준: `강남/청담 · 삼성 ·
+서초 · 방배 · 용산 · 강남 자곡 · 인천 송도 · 분당 서현 · 인천 · 수원 · 안성 ·
+대전 · 대전 유성 · 원주 · 성남` 전시장).
 
 ---
 
