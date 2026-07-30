@@ -146,6 +146,39 @@ PYTHONPATH=src python -m pytest -q
 
 ---
 
+## 한성자동차 전시장 판매사원 수집 (이름 / 연락처 / 전시장)
+
+메르세데스-벤츠 **한성자동차** 전시장 페이지에서 판매사원의 **이름·연락처·소속
+전시장**을 모아 엑셀로 저장하는 별도 수집기입니다.
+
+- 대상: <https://mb.hansung.co.kr/sales/retail-store> → 개별 전시장
+  페이지(`/sales/retail-store-<n>`).
+- 파서는 **텍스트 기반 휴리스틱**(전화번호를 앵커로 이름을 짝지음)이라 마크업이
+  바뀌어도 비교적 견고합니다. 구조가 다르면 `src/butimi/hansung_staff.py` 의
+  `parse_staff()` 규칙만 조정하면 됩니다.
+
+```bash
+# 사이트 접근이 되는 PC 에서 실행
+PYTHONPATH=src python scripts/crawl_hansung_staff.py                 # → output/hansung_staff_YYYYMMDD.xlsx
+PYTHONPATH=src python scripts/crawl_hansung_staff.py --format csv
+PYTHONPATH=src python scripts/crawl_hansung_staff.py --save-html output/html   # 원본 HTML 함께 저장
+
+# 저장해 둔 HTML 로 오프라인 재파싱
+PYTHONPATH=src python scripts/crawl_hansung_staff.py --from-html output/html
+```
+
+> ⚠️ 이 저장소를 만든 실행 환경은 네트워크 정책상 `mb.hansung.co.kr` 접근이
+> **차단**돼 있어, 여기서는 실제 수집을 실행할 수 없습니다. 위 스크립트를
+> **사이트 접근이 되는 본인 PC**에서 돌리면 엑셀이 생성됩니다. 페이지가 JS 로
+> 렌더링되어 링크/사원이 안 잡히면 `--save-html` 로 HTML 을 저장해 파서를
+> 맞추거나, 저장한 HTML 을 공유해 주세요(파서를 고정해 드립니다).
+
+수집 후, 아직 사원이 안 잡힌 전시장을 자동 점검합니다(사용자가 알려준
+`강남/청담 · 삼성 · 서초 · 방배 · 용산 · 강남 자곡 · 인천 송도 · 분당 서현 ·
+인천 · 수원 · 안성 · 대전 · 대전 유성 · 원주 · 성남` 전시장 기준).
+
+---
+
 ## 유의 / 매너
 
 - 각 캐피탈사 사이트의 **이용약관 / robots.txt** 를 확인하고, 과도한 요청은
