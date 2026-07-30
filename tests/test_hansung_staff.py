@@ -24,6 +24,25 @@ def test_parse_staff_extracts_name_contact():
     assert by_name["이영희"].contact == "010-2345-6789"  # 직통보다 앞선 휴대폰
     assert by_name["박민수"].contact == "010-3456-7890"  # 점 표기 → 하이픈
 
+    # 개인 팀이 페이지에 없으면 전시장 팀 범위로 채운다
+    assert all(m.team == "2팀~마스터팀" for m in members)  # 방배 전시장 범위
+
+
+def test_per_person_team_detected():
+    html = """
+      <div><span>정우성</span><span>3팀</span><span>010-1111-2222</span></div>
+      <div><span>한지민</span><span>마스터팀</span><span>010-3333-4444</span></div>
+    """
+    by_name = {m.name: m for m in hs.parse_staff(html, showroom="강남/청담 전시장")}
+    assert by_name["정우성"].team == "3팀"
+    assert by_name["한지민"].team == "마스터팀"
+
+
+def test_team_range_lookup_ignores_spacing():
+    assert hs.team_range_for("강남/청담 전시장") == "2팀~9팀"
+    assert hs.team_range_for("강남청담전시장") == "2팀~9팀"
+    assert hs.team_range_for("없는 전시장") == ""
+
 
 def test_stopwords_not_treated_as_names():
     # 직급/일반 단어는 이름으로 잡히지 않는다
@@ -58,8 +77,8 @@ def test_discover_store_links():
 
 def test_to_xlsx_and_csv(tmp_path):
     members = [
-        hs.StaffMember("김철수", "010-1234-5678", "방배 전시장"),
-        hs.StaffMember("이영희", "010-2345-6789", "방배 전시장"),
+        hs.StaffMember("김철수", "010-1234-5678", "방배 전시장", "2팀~마스터팀"),
+        hs.StaffMember("이영희", "010-2345-6789", "방배 전시장", "3팀"),
     ]
     xlsx = hs.to_xlsx(members, tmp_path / "staff.xlsx")
     csv = hs.to_csv(members, tmp_path / "staff.csv")
@@ -67,5 +86,6 @@ def test_to_xlsx_and_csv(tmp_path):
 
     from openpyxl import load_workbook
     ws = load_workbook(xlsx).active
-    assert [c.value for c in ws[1]] == ["이름", "연락처", "전시장"]
+    assert [c.value for c in ws[1]] == ["이름", "연락처", "전시장", "팀"]
     assert ws.max_row == 3  # 헤더 + 2명
+    assert ws["D2"].value == "2팀~마스터팀"

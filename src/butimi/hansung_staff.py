@@ -32,13 +32,39 @@ from urllib.parse import urljoin
 
 BASE_URL = "https://mb.hansung.co.kr/sales/retail-store"
 
-# 사용자가 "아직 크롤링 안 됐다"고 알려준 전시장들. 수집 후 누락 점검용 기준 목록.
-EXPECTED_SHOWROOMS: tuple[str, ...] = (
-    "강남/청담 전시장", "삼성 전시장", "서초 전시장", "방배 전시장", "용산 전시장",
-    "강남 자곡 전시장", "인천 송도 전시장", "분당 서현 전시장", "인천 전시장",
-    "수원 전시장", "안성 전시장", "대전 전시장", "대전 유성 전시장",
-    "원주 전시장", "성남 전시장",
-)
+# 전시장별 팀 범위(사용자 제공). 페이지에서 개인 팀이 안 잡히면 이 값으로 채운다.
+# 수집 후 누락 점검(EXPECTED_SHOWROOMS)의 기준 목록이기도 하다.
+SHOWROOM_TEAM_RANGE: dict[str, str] = {
+    "강남/청담 전시장": "2팀~9팀",
+    "삼성 전시장": "2팀~5팀",
+    "서초 전시장": "2팀~마스터팀",
+    "방배 전시장": "2팀~마스터팀",
+    "용산 전시장": "2팀~마스터팀",
+    "강남 자곡 전시장": "2팀~3팀",
+    "인천 송도 전시장": "2팀~3팀",
+    "분당 서현 전시장": "2팀~4팀",
+    "인천 전시장": "2팀~3팀",
+    "수원 전시장": "2팀~4팀",
+    "안성 전시장": "2팀~마스터팀",
+    "대전 전시장": "2팀~마스터팀",
+    "대전 유성 전시장": "2팀~3팀",
+    "원주 전시장": "2팀",
+    "성남 전시장": "2팀",
+}
+
+EXPECTED_SHOWROOMS: tuple[str, ...] = tuple(SHOWROOM_TEAM_RANGE)
+
+# 개인 소속 팀 토큰: "3팀", "판매 5팀", "마스터팀" 등
+_TEAM_RE = re.compile(r"(?:마스터팀|\d+\s*팀)")
+
+
+def team_range_for(showroom: str) -> str:
+    """전시장 이름으로 팀 범위를 찾는다(공백/구분자 무시 매칭). 없으면 빈 문자열."""
+    target = _norm_store(showroom)
+    for name, rng in SHOWROOM_TEAM_RANGE.items():
+        if _norm_store(name) == target:
+            return rng
+    return ""
 
 
 def _norm_store(name: str) -> str:
@@ -83,10 +109,16 @@ class StaffMember:
     name: str          # 이름
     contact: str       # 연락처(전화번호)
     showroom: str      # 소속 전시장
+    team: str = ""     # 팀(개인 소속 팀 또는 전시장 팀 범위)
     detail_url: str = ""  # 출처 전시장 페이지 URL
 
     def to_row(self) -> dict[str, str]:
-        return {"이름": self.name, "연락처": self.contact, "전시장": self.showroom}
+        return {
+            "이름": self.name,
+            "연락처": self.contact,
+            "전시장": self.showroom,
+            "팀": self.team,
+        }
 
 
 # --------------------------------------------------------------------------- #
@@ -152,12 +184,19 @@ def parse_staff(html: str, showroom: str, detail_url: str = "") -> list[StaffMem
     lines = html_to_lines(html)
     members: list[StaffMember] = []
     pending_name: str | None = None
+    pending_team: str = ""
+    fallback_team = team_range_for(showroom)
     last_key: tuple[str, str] | None = None
 
     for line in lines:
         # 한 줄 안에 이름 토큰이 단독으로 있으면 후보로 기억
         if _looks_like_name(line):
             pending_name = line
+
+        # 개인 팀 토큰("3팀", "마스터팀")이 보이면 기억
+        team_hit = _TEAM_RE.search(line)
+        if team_hit:
+            pending_team = re.sub(r"\s+", "", team_hit.group())
 
         phones = _PHONE_RE.findall(line)
         if not phones:
@@ -178,10 +217,13 @@ def parse_staff(html: str, showroom: str, detail_url: str = "") -> list[StaffMem
         key = (name, contact)
         if key == last_key:
             continue
-        members.append(StaffMember(name=name, contact=contact,
-                                   showroom=showroom, detail_url=detail_url))
+        members.append(StaffMember(
+            name=name, contact=contact, showroom=showroom,
+            team=pending_team or fallback_team, detail_url=detail_url,
+        ))
         last_key = key
         pending_name = None
+        pending_team = ""
 
     return members
 
@@ -271,7 +313,7 @@ def dedupe(members: Iterable[StaffMember]) -> list[StaffMember]:
 # 엑셀 내보내기
 # --------------------------------------------------------------------------- #
 
-COLUMNS = ["이름", "연락처", "전시장"]
+COLUMNS = ["이름", "연락처", "전시장", "팀"]
 
 
 def to_xlsx(members: Iterable[StaffMember], path: str | Path,
@@ -295,7 +337,7 @@ def to_xlsx(members: Iterable[StaffMember], path: str | Path,
         ws.append([row[c] for c in COLUMNS])
 
     ws.freeze_panes = "A2"
-    widths = {"이름": 14, "연락처": 20, "전시장": 24}
+    widths = {"이름": 14, "연락처": 20, "전시장": 24, "팀": 14}
     for idx, col in enumerate(COLUMNS, start=1):
         ws.column_dimensions[chr(64 + idx)].width = widths.get(col, 16)
 
